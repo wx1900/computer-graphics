@@ -1,0 +1,335 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>B-spline curve</title>
+        <script src = "../third-party/jquery-3.3.1.js"></script>
+        <script src = "../third-party/semantic.js"></script>
+        <script src = "https://d3js.org/d3.v3.js"></script>
+        <link rel="stylesheet" type="text/css" href="../third-party/semantic.css">
+        <style>
+            body {
+                font: 13px sans-serif;
+                position: relative;
+                width: 960px;
+                height: 500px;
+            }
+        
+            form {
+                position: absolute;
+                bottom: 10px;
+                left: 10px;
+            }
+        
+        
+            circle,
+            .line {
+                fill: none;
+                stroke: steelblue;
+                stroke-width: 1.5px;
+            }
+        
+            circle {
+                fill: #fff;
+                fill-opacity: .2;
+                cursor: move;
+            }
+        
+            .selected {
+                fill: #ff7f0e;
+                stroke: #ff7f0e;
+            }
+
+            .axis path,
+            .axis line{
+                fill: none;
+                stroke: black;
+                shape-rendering: crispEdges;
+            }
+            .axis text{
+                font-family: sans-serif;
+                font-size: 11px;
+                color: black;
+            }
+        </style>
+    
+    </head>
+    <body>
+        <div class="ui form">
+            <div class="ui primary basic button" id = "generate"> Generate </div>
+            <div class="ui primary basic button" id = "delete"> Delete </div>
+            <div class="ui primary basic button" id = "intro"> Introduction </div>
+        </div>
+    </body>
+    <script>
+        var degree = 2; // dgree
+        var width = 1200, height = 800;
+        var radius = 6.5;
+        var points = [];
+        var curveVtx = [];
+        var dragged = null; 
+        var selected = points[0];
+
+        var isDrawingLine = true;
+        var gis_edit = false;
+
+        $("#generate").click(function() {
+            curveVtx = [];
+            // interpolate();
+            deBoorAlgorithm();
+            redraw();
+        });
+
+        $("#intro").click(function() {
+            alert("在网页上画两个以上的点, 会生成一条 Bézier 曲线; 拖动已有的点, 会生成一条新的 Bézier 曲线; 点击生成按钮, 计算与x轴的交点; Bézier 曲线为蓝色, 控制多边形为红色.");
+        });
+
+        $("#delete").click(function() {
+            points = [];
+            curveVtx = [];
+            svg.selectAll(".axistext")
+                .remove();
+            redraw();
+        });
+
+        var line = d3.svg.line();
+
+        var svg = d3.select("body").append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .attr("tabindex", 1)
+            .on("mousedown", mousedown);
+            // .attr("transform", "translate(20, 10)");
+        
+        svg.append("path")
+            .datum(points)
+            .attr("class", "line")
+            .call(redraw);
+        
+        d3.select(window)
+            .on("mousemove", mousemove)
+            .on("mouseup", mouseup);
+    
+        svg.node().focus();
+
+        function drawHotPoint() {
+            svg.selectAll("circle")
+                .data(points, function(d) {return d;})
+                .enter().append("circle")
+                .on("mousedown", function(d){selected = dragged = d; redraw();})
+                .attr("r", radius)
+                .attr("cx", function(d){return d[0];})
+                .attr("cy", function(d){return d[1];})
+        }
+
+    
+
+        function redraw() {
+            svg.selectAll("path")
+                .remove();
+            
+            var circle = svg.selectAll("circle")
+                .data(points, function(d) {return d;})
+            
+            circle.enter().append("circle")
+                .attr("r", 1e-6)
+                .on("mousedown", function(d) {selected = dragged = d; redraw();})
+                .transition()
+                .duration(750)
+                .ease("elastic")
+                .attr("r", radius);
+
+            circle.classed("selected", function(d) {return d === selected;})
+                .attr("cx", function(d) {return d[0];})
+                .attr("cy", function(d) {return d[1];})
+            
+            circle.exit().remove();
+
+            var lineGraph = svg.append("g")
+                            .append("path")
+                            .attr("d", function(d,i) {return line(points);})
+                            .attr("stroke","red")
+                            .attr("stroke-width",2)
+                            .attr("opacity", 0.6)
+                            .attr("fill","none");
+
+            console.log("draw curve");
+            console.log(curveVtx);
+            var lineGraph = svg.append("g")
+                            .append("path")
+                            .attr("d", function(d,i) {return line(curveVtx);})
+                            .attr("stroke","blue")
+                            .attr("stroke-width",2)
+                            .attr("opacity", 0.6)
+                            .attr("fill","none");
+            
+            if (d3.event) {
+                d3.event.preventDefault();
+                d3.event.stopPropagation();
+            }
+        }
+
+        function mousedown() {
+            if(!isDrawingLine) return;
+            points.push(d3.mouse(svg.node()));
+            // 
+            redraw();
+        }
+
+        function mousemove() {
+            if (!dragged) return;
+            var m = d3.mouse(svg.node());
+            dragged[0] = Math.max(0, Math.min(width, m[0]));
+            dragged[1] = Math.max(0, Math.min(height, m[1]));
+            //
+            redraw();
+        }
+
+        function mouseup() {
+            if (!dragged) return;
+            mousemove();
+            dragged = null;
+        }
+       
+        function interpolate(){
+            // p - degree - k
+            // knots - 0, 1/n+k, 2/n+k, ... , n+k-1/n+k, 1 (n+k+1 elements  )
+            var n = points.length;
+            var knots = [];
+            for (var i = 0; i < (n + dgree + 1); i++) {
+                knots.push(i/(n+dgree));
+                console.log(i/(n+dgree));
+            }
+            console.log(knots);
+            for (var t = 0; t < 1; t += 0.01) {
+                console.log("t="+t+", n="+n);
+                var NC = [];
+                if (t > 0.02) break;
+                for (var i = 0; i < n; i++) {
+                    if (t > knots[i] & t < knots[i+1] & t != knots[i]) {
+                        NC[index(i, 1)] = 1;
+                    } else {
+                        NC[index(i, 1)] = 0;
+                    }
+                }
+                console.log("init NC:");
+                console.log(NC);
+                for (var i = 0; i < n; i++) {
+                    for (var k = 2; k < dgree; k++) {
+                        var tmp1 = knots[i+k] - knots[i+1];
+                        var tmp2 = knots[i+k-1] - knots[i];
+                        console.log("tmp1="+tmp1+" , tmp2="+tmp2);
+                        if (tmp1 != 0.) {
+                            tmp1 = 1/tmp1;
+                        } else if (tmp2 != 0.) {
+                            tmp2 = 1/tmp2;
+                        } 
+                        NC[index(i, k)] = (knots[i+k] - t) * NC[index(i+1, k-1)]*tmp1 + (t - knots[i]) * NC[index(i, k-1)]*tmp2;
+                        console.log("NC "+ index(i, k)+" = "+NC[index(i, k)]);
+                        console.log("knots[i+k] "+knots[i+k]+" , t "+t+", NC[i+1, k-1] "+NC[index(i+1, k-1)]+" , knots[i] "+knots[i]+ ", NC[i, k-1] "+NC[index(i, k-1)]);
+                    }
+                }
+                console.log(NC);
+                var newPt = [0, 0];
+                for (var i = 0; i < n; i++) {
+                    newPt[0] += points[i][0] * NC[index(i, k)];
+                    newPt[1] += points[i][1] * NC[index(i, k)];                
+                }
+                curveVtx.push(newPt);
+            }
+            console.log("curveVtx:");
+            console.log(curveVtx);
+        }
+        function index(i, k) {
+            console.log("index "+(i * points.length + k-1));
+            return i * points.length + k-1;
+        }
+        function Calc () {
+            
+        }
+        function deBoor(k, x, t, c, p) {
+            // k: index of knot interval that contains x
+            // x: position
+            // t: array of knot positions, needs to be padded as described above
+            // c: array of control points
+            // p: degree of B-spline
+            for (var j = 0; j < p + 1; j++) {
+                d = [c[j + k - p]];
+            }
+            for (var r = 1; r < p + 1; r++) {
+                for (var j = p; j > r - 1; j--) {
+                    alpha = (x - t[j+k-p]) / (t[j+1+k-r] - t[j+k-p]);
+                    d[j] = (1.0 - alpha) * d[j - 1] + alpha * d[j];
+                }
+            }
+            return d[p];   
+        }
+        function deBoorAlgorithm () {
+            var n = degree;
+            var p = points.length;
+            var u = new Array();
+            var s = [];
+            console.log("n: " + n + ", p: " + p);
+            for (var i = 0; i < p + n + 1; i++) {
+                // initialize u_0 to u_(p+n)
+                if (i < n) u[i] = 0;
+                else if (i > p) u[i] = 1;
+                else u[i] = (i - n) / p;
+            }
+            console.log('u: '+u);
+            var step = 0.01;
+            for (var x = 0; x < 1; x += step) {
+                var d = [];
+                // if (x > 0.03) break;
+                var l = n; // l 从 n 到 p+n
+                for (; l < p + n + 1; l++) {
+                    if (x >= u[l] && x < u[l+1]) {
+                        break;
+                    }
+                }
+                console.log("********************** l " + l + ', u= ' + u[l] + ', x=' + x);
+                for (var i = l - n; i <= l; i++) {
+                    d[idx(i, 0, l, n)] = points[i];
+                }
+                console.log('-----------------------d: ' + d);
+                // initialize d when k = 0
+                for (var k = 1; k <= n; k++) {
+                    for (var i = l - n + k; i <= l; i++) { // l > n-1
+                        // console.log(d);
+                        
+                        if (u[i+n+1-k] != u[i]) {
+                            var newPt = [];
+                            a_ki = (x - u[i]) / (u[i + n + 1 - k] - u[i]);
+                            console.log('aa+++++++++++++++++++++++++++=');
+                            console.log('d('+(i-1)+','+(k-1)+') '+d[idx(i-1, k-1, l, n)][0]+', '+d[idx(i-1, k-1, l, n)][1]);
+                            console.log('d('+i+','+(k-1)+') '+d[idx(i, k-1, l, n)][0]+', '+d[idx(i, k-1, l, n)][1]);
+                            newPt.push((1 - a_ki) * d[idx(i-1, k-1, l, n)][0] + a_ki * d[idx(i, k-1, l, n)][0]);
+                            newPt.push((1 - a_ki) * d[idx(i-1, k-1, l, n)][1] + a_ki * d[idx(i, k-1, l, n)][1]);
+                            d.push(newPt);
+                            console.log('d.size = ' + d.length);
+                        }
+                    }
+                    console.log('-----------------------d: ' + d);
+                }
+                s.push(d[idx(l, n, l, n)]); 
+                d = [];
+                // console.log(d);  
+            }
+            // console.log("points");
+            // console.log(points);
+            console.log(s);
+            // s[0] = points[0];
+            // console.log(s);
+            // curveVtx = s;
+        }
+        function idx(i, k, l, n) {
+            if (k == 0) {
+                console.log("i = "+i+", k= "+ k + ", l= "+l+", n="+n+", "+(i-k-(l-n) + k * (l - n + (k-1) / 2)));
+                return i-k-(l-n) + k * (l - n + (k-1) / 2); // k(l-n+k+l-n)/2
+            } else {
+                console.log("i = "+i+", k= "+ k + ", l= "+l+", n="+n+", "+ (i + k * (n + 1 + (k-1) / 2)));
+                return i-k + k * (n + 1 + (k-1) / 2);
+            } 
+                
+        }
+    </script>
+</html>

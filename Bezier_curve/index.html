@@ -1,0 +1,214 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Bézier</title>
+        <script src = "../third-party/jquery-3.3.1.js"></script>
+        <script src = "../third-party/semantic.js"></script>
+        <script src = "https://d3js.org/d3.v3.js"></script>
+        <link rel="stylesheet" type="text/css" href="../third-party/semantic.css">
+        <style>
+            body {
+                font: 13px sans-serif;
+                position: relative;
+                width: 960px;
+                height: 500px;
+            }
+        
+            form {
+                position: absolute;
+                bottom: 10px;
+                left: 10px;
+            }
+        
+        
+            circle,
+            .line {
+                fill: none;
+                stroke: steelblue;
+                stroke-width: 1.5px;
+            }
+        
+            circle {
+                fill: #fff;
+                fill-opacity: .2;
+                cursor: move;
+            }
+        
+            .selected {
+                fill: #ff7f0e;
+                stroke: #ff7f0e;
+            }
+        
+        </style>
+    
+    </head>
+    <body>
+        <div class="ui form">
+            <div class="ui primary basic button" id = "generate"> Generate </div>
+            <div class="ui primary basic button" id = "delete"> Delete </div>
+            <div class="ui primary basic button" id = "intro"> Introduction </div>
+        </div>
+    </body>
+    <script>
+
+        var width = 1200, height = 800;
+        var radius = 6.5;
+        var points = [];
+        var lineVtx = [];
+        var dragged = null; 
+        var selected = points[0];
+
+        var isDrawingLine = true;
+        var gis_edit = false;
+
+        $("#generate").click(function() {
+            lineVtx = [];
+            Bezier();
+            redraw();
+        });
+
+        $("#intro").click(function() {
+            alert("在网页上画两个以上的点, 点击生成按钮, 会生成一条 Bézier 曲线; 拖动已有的点, 点击生成按钮, 会生成一条新的 Bézier 曲线; Bézier 曲线为蓝色, 控制多边形为红色.");
+        });
+
+        $("#delete").click(function() {
+            points = [];
+            lineVtx = [];
+            redraw();
+        });
+
+        var line = d3.svg.line();
+
+        var svg = d3.select("body").append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .attr("tabindex", 1)
+            .on("mousedown", mousedown);
+        
+        svg.append("path")
+            .datum(points)
+            .attr("class", "line")
+            .call(redraw);
+        
+        d3.select(window)
+            .on("mousemove", mousemove)
+            .on("mouseup", mouseup);
+        
+        svg.node().focus();
+
+        function drawHotPoint() {
+            svg.selectAll("circle")
+                .data(points, function(d) {return d;})
+                .enter().append("circle")
+                .on("mousedown", function(d){selected = dragged = d; redraw();})
+                .attr("r", radius)
+                .attr("cx", function(d){return d[0];})
+                .attr("cy", function(d){return d[1];})
+        }
+
+        function redraw() {
+            svg.selectAll("path")
+                .remove();
+
+            var circle = svg.selectAll("circle")
+                .data(points, function(d) {return d;})
+            
+            circle.enter().append("circle")
+                .attr("r", 1e-6)
+                .on("mousedown", function(d) {selected = dragged = d; redraw();})
+                .transition()
+                .duration(750)
+                .ease("elastic")
+                .attr("r", radius);
+
+            circle.classed("selected", function(d) {return d === selected;})
+                .attr("cx", function(d) {return d[0];})
+                .attr("cy", function(d) {return d[1];})
+            
+            circle.exit().remove();
+
+            var lineGraph = svg.append("g")
+                            .append("path")
+                            .attr("d", function(d,i) {return line(points);})
+                            .attr("stroke","red")
+                            .attr("stroke-width",2)
+                            .attr("opacity", 0.6)
+                            .attr("fill","none");
+
+            var lineGraph = svg.append("g")
+                            .append("path")
+                            .attr("d", function(d,i) {return line(lineVtx);})
+                            .attr("stroke","blue")
+                            .attr("stroke-width",2)
+                            .attr("opacity", 0.6)
+                            .attr("fill","none");
+            
+            if (d3.event) {
+                d3.event.preventDefault();
+                d3.event.stopPropagation();
+            }
+        }
+
+        function mousedown() {
+            if(!isDrawingLine) return;
+            points.push(d3.mouse(svg.node()));
+            redraw();
+        }
+
+        function mousemove() {
+            if (!dragged) return;
+            var m = d3.mouse(svg.node());
+            dragged[0] = Math.max(0, Math.min(width, m[0]));
+            dragged[1] = Math.max(0, Math.min(height, m[1]));
+            redraw();
+        }
+
+        function mouseup() {
+            if (!dragged) return;
+            mousemove();
+            dragged = null;
+        }
+       
+        function Bezier () {
+            // Bezier 曲线割角算法
+            var t = 0; 
+            lineVtx = [];
+            var delta = 0.01;
+            for (; t <= 1; t += delta) {
+                var DP = [];
+                if (points.length > 1) {
+                    // console.log(points);
+                    for (var i = 0; i < points.length; i++) {
+                        DP[i] = points[i];
+                    }
+
+                    // console.log("DP: " + DP);
+                
+                    for (var k = 1; k < points.length; k++) {
+                        for (var i = 0; i < points.length - k; i++) {
+                            var newPt = [];
+                            newPt.push((1-t) * DP[index(i, k-1)][0] + t * DP[index(i+1, k-1)][0]);
+                            newPt.push((1-t) * DP[index(i, k-1)][1] + t * DP[index(i+1, k-1)][1]);
+                            // console.log("i,k-1 "+ index(i, k-1)+", i+1, k-1 "+index(i+1, k-1));
+                            // console.log("i = " + i + " , k = " + k + ", DP(i,k-1) "+ DP[index(i, k-1)] + " , DP(i+1, k-1) "+DP[index(i+1, k-1)]);
+                            // console.log("newpt "+newPt);
+                            DP.push(newPt);
+                        }
+                    }
+                    // console.log("DP: "+DP);
+                    // console.log("push "+DP[DP.length-1]);
+                    lineVtx.push(DP[DP.length-1]);
+                } else {
+                    alert("请至少画两个点, 才能生成曲线.");
+                    break;
+                }
+            }
+            lineVtx.push(points[points.length-1]);
+            // console.log(lineVtx);
+        }
+        // 用一维数组模拟二维数组(但实际存的维度不同, 根据递推关系, 实际是一个上三角矩阵)
+        function index(i, k) {
+            return k * points.length - (k - 1) * k / 2 + i;
+        }
+    </script>
+</html>

@@ -1,0 +1,171 @@
+<html>
+    <head>
+        <title>Liang-Barsky</title>
+        <script src = "../third-party/jquery-3.3.1.js"></script>
+        <script src = "../third-party/semantic.js"></script>
+        <link rel="stylesheet" type="text/css" href="../third-party/semantic.css">
+    </head>
+    <body>
+        <div class="ui raised segment" style="width:820px;height:620px ">
+            <canvas id = "canvas" width = "800px" height = "600px"></canvas>
+        </div>
+        <div class="ui teal message" id = "msg" style = "width:820px">
+            <a href="https://en.wikipedia.org/wiki/Liang%E2%80%93Barsky_algorithm"> Liang-Barsky algorithm</a>
+        </div>
+    </body>
+    <script>
+        var rectx = Math.floor(Math.random()*400+100);
+        var recty = Math.floor(Math.random()*200+100);
+        var lenx = Math.floor(Math.random()*100+100);
+        var leny = Math.floor(Math.random()*100+100);
+        var rectx1 = rectx + lenx;
+        var recty1 = recty + leny;
+        var width = 800;
+        var height = 600;
+
+        var canvas = document.getElementById('canvas');
+        var cvs = canvas.getContext('2d')
+        var penWeight = 1;
+        var penColor = '#f00';
+        
+        var x0 = 0.;
+        var x1 = 0.;
+        var y0 = 0.;
+        var y1 = 0.;
+        var t = 0.5;
+        var tl = 0.;
+        var tr = 0.;
+        var tt = 0.;
+        var tb = 0.;
+
+        // 随机矩形
+        cvs.strokeRect(rectx, recty, lenx, leny);  //绘制矩形边框
+        
+        // 固定矩形
+        // cvs.strokeRect(260, 200, 200, 200);
+        // rectx = 260.;
+        // rectx1 = 460.;
+        // recty = 200.;
+        // recty1 = 400.;
+
+        // document.getElementById("msg").innerHTML="(x0,y0) = ("+rectx+", "+ recty+"); width = "+lenx +", height = "+leny+" ;";
+
+        canvas.onmousedown = function(e) {
+            var x0 = e.clientX - canvas.offsetLeft + document.body.scrollLeft;
+            var y0 = e.clientY - canvas.offsetTop + document.body.scrollTop;
+            console.log("x0:"+x0);
+            console.log("y0:"+y0);
+            cvs.beginPath();
+            cvs.moveTo(x0, y0);
+            cvs.lineCap = 'round';
+            cvs.lineJoin = 'round';
+            cvs.strokeStyle = penColor;
+            cvs.lineWidth = penWeight;
+            
+            canvas.onmouseup = function(e) {
+            
+                var x1 = e.clientX - canvas.offsetLeft + document.body.scrollLeft;
+                var y1 = e.clientY - canvas.offsetTop + document.body.scrollTop;
+                console.log("x1:"+x1);
+                console.log("y1:"+y1);
+                cvs.lineTo(x1, y1);
+                cvs.stroke();
+                cvs.closePath();
+                canvas.onmousemove = null;
+                canvas.onmouseup = null;
+                tmin = 0;
+                tmax = 1;
+                tr = (rectx1 - x0)/(x1-x0);
+                tl = (rectx - x0)/(x1-x0);
+                tt = (recty - y0)/(y1-y0);
+                tb = (recty1 - y0)/(y1-y0);
+                console.log("("+rectx1+"-"+x0+")/("+x1+"-"+x0+");");
+                console.log("tr:"+tr);
+                console.log("("+rectx+"-"+x0+")/("+x1+"-"+x0+");");
+                console.log("tl:"+tl);
+                console.log("("+recty+"-"+y0+")/("+y1+"-"+y0+");");
+                console.log("tt:"+tt);
+                console.log("("+recty1+"-"+y0+")/("+y1+"-"+y0+");");
+                console.log("tb:"+tb);
+                var temp = 0;
+                var cross = 0; // 不相交
+                if (tr > 0 && tr < 1) {
+                    temp = (x1-x0)*1;
+                    var ytemp = y0 + tr * (y1 - y0);
+                    if (ytemp >= recty && ytemp <= recty1) {
+                        cross = 1; // 相交
+                        if (temp < 0)
+                            tmin = tr;
+                        else if (temp > 0)
+                            tmax = tr;
+                        console.log("r:"+temp);
+                    }                    
+                }
+                if (tl >0 && tl < 1) {
+                    temp = (x1-x0)*(-1);
+                    var ytemp = y0 + tl * (y1 - y0);
+                    if (ytemp >= recty && ytemp <= recty1) {
+                        cross = 1;
+                        if(temp > 0)
+                            tmax = tl;
+                        else if (temp < 0)
+                            tmin = tl;
+                        console.log("l:"+temp);
+                    }
+                }
+                if (tt > 0 && tt < 1) {
+                    temp = (y1-y0)*(-1);
+                    var xtemp = x0 + tt * (x1 - x0);
+                    if (xtemp >= rectx && xtemp <= rectx1) {
+                        cross = 1;
+                        if (temp > 0)
+                            tmax = tt;
+                        else if (temp < 0)
+                            tmin = tt;
+                        console.log("t:"+temp);
+                    }                    
+                }
+                if (tb > 0 && tb < 1) {
+                    temp = (y1-y0)*1;
+                    var xtemp = x0 + tb * (x1 - x0);
+                    if (xtemp >= rectx && xtemp <= rectx1) {
+                        cross = 1;
+                        if (temp > 0)
+                            tmax = tb;
+                        else if (temp < 0)
+                            tmin = tb;
+                        console.log("b:"+temp);
+                    }
+                }
+                console.log("tmin: "+tmin+"; tmax: "+tmax);
+                if (tmin < tmax && cross == 1 ) {
+                    xstart = x0 + tmin * (x1 - x0);
+                    ystart = y0 + tmin * (y1 - y0);
+                    xend = x0 + tmax * (x1 - x0);
+                    yend = y0 + tmax * (y1 - y0);
+                    console.log("("+xstart+", "+ystart+") to ("+xend+", "+yend+")");
+                    
+                    cvs.beginPath();
+                    cvs.moveTo(xstart, ystart);
+                    cvs.strokeStyle = '#00f';
+                    cvs.lineWidth = 3;
+                    cvs.lineTo(xend, yend);
+                    cvs.stroke();
+                    cvs.closePath();
+                                        
+                } else if (x0 <= rectx1 && x0 >= rectx && y0 <= recty1 && y0 >= recty) {
+                    // 不相交，线段完全在矩形内部
+                    // 解决不相交的外部线段不选中的问题
+                    cvs.beginPath();
+                    cvs.moveTo(x0, y0);
+                    cvs.lineCap = 'round';
+                    cvs.strokeStyle = '#00f';
+                    cvs.lineWidth = 3;
+                    cvs.lineTo(x1, y1);
+                    cvs.stroke();
+                    cvs.closePath();
+                }
+            }
+        }
+    </script>
+</html>

@@ -1,0 +1,385 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Bézier curve root</title>
+        <script src = "../third-party/jquery-3.3.1.js"></script>
+        <script src = "../third-party/semantic.js"></script>
+        <script src = "https://d3js.org/d3.v3.js"></script>
+        <link rel="stylesheet" type="text/css" href="../third-party/semantic.css">
+        <style>
+            body {
+                font: 13px sans-serif;
+                position: relative;
+                width: 960px;
+                height: 500px;
+            }
+        
+            form {
+                position: absolute;
+                bottom: 10px;
+                left: 10px;
+            }
+        
+        
+            circle,
+            .line {
+                fill: none;
+                stroke: steelblue;
+                stroke-width: 1.5px;
+            }
+        
+            circle {
+                fill: #fff;
+                fill-opacity: .2;
+                cursor: move;
+            }
+        
+            .selected {
+                fill: #ff7f0e;
+                stroke: #ff7f0e;
+            }
+
+            .axis path,
+            .axis line{
+                fill: none;
+                stroke: black;
+                shape-rendering: crispEdges;
+            }
+            .axis text{
+                font-family: sans-serif;
+                font-size: 11px;
+                color: black;
+            }
+        </style>
+    
+    </head>
+    <body>
+        <div class="ui form">
+            <div class="ui primary basic button" id = "generate"> Generate </div>
+            <div class="ui primary basic button" id = "delete"> Delete </div>
+            <div class="ui primary basic button" id = "intro"> Introduction </div>
+        </div>
+    </body>
+    <script>
+        var ym = 400; // 坐标轴
+        var xm = 50; // root x-xm
+        var tol = 1e-8; // 误差范围
+        var width = 1200, height = 800;
+        var radius = 6.5;
+        var points = [];
+        var lineVtx = [];
+        var dragged = null; 
+        var selected = points[0];
+
+        var isDrawingLine = true;
+        var gis_edit = false;
+
+        $("#generate").click(function() {
+            lineVtx = [];
+            Bezier();
+            getRoot();
+            redraw();
+        });
+
+        $("#intro").click(function() {
+            alert("在网页上画两个以上的点, 会生成一条 Bézier 曲线; 拖动已有的点, 会生成一条新的 Bézier 曲线; 点击生成按钮, 计算与x轴的交点; Bézier 曲线为蓝色, 控制多边形为红色.");
+        });
+
+        $("#delete").click(function() {
+            points = [];
+            lineVtx = [];
+            svg.selectAll(".axistext")
+                .remove();
+            redraw();
+        });
+
+        var line = d3.svg.line();
+
+        var svg = d3.select("body").append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .attr("tabindex", 1)
+            .on("mousedown", mousedown);
+            // .attr("transform", "translate(20, 10)");
+        
+        svg.append("path")
+            .datum(points)
+            .attr("class", "line")
+            .call(redraw);
+        
+        d3.select(window)
+            .on("mousemove", mousemove)
+            .on("mouseup", mouseup);
+        // 坐标轴
+        var xScale = d3.scale.linear()
+            .domain([0,1000])
+            .range([0, 1000]);
+
+        var axis = d3.svg.axis()
+            .scale(xScale)
+            .orient("bottom")
+            .ticks(10);
+        svg.append("g").call(axis)
+            .attr("transform", "translate(50, 400)")
+            .attr("fill", "none")
+            .attr("stroke", "black")
+            .attr("stroke-width", 1)
+            .attr("shape-rendering", "crispEdges");
+
+        svg.node().focus();
+
+        function drawHotPoint() {
+            svg.selectAll("circle")
+                .data(points, function(d) {return d;})
+                .enter().append("circle")
+                .on("mousedown", function(d){selected = dragged = d; redraw();})
+                .attr("r", radius)
+                .attr("cx", function(d){return d[0];})
+                .attr("cy", function(d){return d[1];})
+        }
+
+        // the axis will be removed
+        svg.append('line')
+                    .attr('x1', xm)
+                    .attr('y1', ym)
+                    .attr('x2', 1050)
+                    .attr('y2', ym)
+                    .attr('stroke', 'black')
+                    .attr('stroke-width', 1)
+                    .attr("fill", "none");
+
+        function redraw() {
+            svg.selectAll("path")
+                .remove();
+            
+            var circle = svg.selectAll("circle")
+                .data(points, function(d) {return d;})
+            
+            circle.enter().append("circle")
+                .attr("r", 1e-6)
+                .on("mousedown", function(d) {selected = dragged = d; redraw();})
+                .transition()
+                .duration(750)
+                .ease("elastic")
+                .attr("r", radius);
+
+            circle.classed("selected", function(d) {return d === selected;})
+                .attr("cx", function(d) {return d[0];})
+                .attr("cy", function(d) {return d[1];})
+            
+            circle.exit().remove();
+
+            var lineGraph = svg.append("g")
+                            .append("path")
+                            .attr("d", function(d,i) {return line(points);})
+                            .attr("stroke","red")
+                            .attr("stroke-width",2)
+                            .attr("opacity", 0.6)
+                            .attr("fill","none");
+
+            var lineGraph = svg.append("g")
+                            .append("path")
+                            .attr("d", function(d,i) {return line(lineVtx);})
+                            .attr("stroke","blue")
+                            .attr("stroke-width",2)
+                            .attr("opacity", 0.6)
+                            .attr("fill","none");
+            
+            if (d3.event) {
+                d3.event.preventDefault();
+                d3.event.stopPropagation();
+            }
+        }
+
+        function mousedown() {
+            if(!isDrawingLine) return;
+            points.push(d3.mouse(svg.node()));
+            Bezier();
+            redraw();
+        }
+
+        function mousemove() {
+            if (!dragged) return;
+            var m = d3.mouse(svg.node());
+            dragged[0] = Math.max(0, Math.min(width, m[0]));
+            dragged[1] = Math.max(0, Math.min(height, m[1]));
+            Bezier();
+            redraw();
+        }
+
+        function mouseup() {
+            if (!dragged) return;
+            mousemove();
+            dragged = null;
+        }
+       
+        function Bezier () {
+            // Bezier 曲线割角算法
+            var t = 0; 
+            lineVtx = [];
+            var delta = 0.01;
+            for (; t <= 1; t += delta) {
+                var DP = [];
+                if (points.length > 1) {
+                    // console.log(points);
+                    for (var i = 0; i < points.length; i++) {
+                        DP[i] = points[i];
+                    }
+
+                    // console.log("DP: " + DP);
+                    var len = points.length;
+                    for (var k = 1; k < len; k++) {
+                        for (var i = 0; i < len - k; i++) {
+                            var newPt = [];
+                            newPt.push((1-t) * DP[index(i, k-1)][0] + t * DP[index(i+1, k-1)][0]);
+                            newPt.push((1-t) * DP[index(i, k-1)][1] + t * DP[index(i+1, k-1)][1]);
+                            // console.log("i,k-1 "+ index(i, k-1)+", i+1, k-1 "+index(i+1, k-1));
+                            // console.log("i = " + i + " , k = " + k + ", DP(i,k-1) "+ DP[index(i, k-1)] + " , DP(i+1, k-1) "+DP[index(i+1, k-1)]);
+                            // console.log("newpt "+newPt);
+                            DP.push(newPt);
+                        }
+                    }
+                    // console.log("DP: "+DP);
+                    // console.log("push "+DP[DP.length-1]);
+                    lineVtx.push(DP[DP.length-1]);
+                } else {
+                    // alert("请至少画两个点, 才能生成曲线.");
+                    break;
+                }
+            }
+            lineVtx.push(points[points.length-1]);
+            // console.log(lineVtx);
+            if (points.length > 1)
+                getRoot();
+        }
+        // 用一维数组模拟二维数组(但实际存的维度不同, 根据递推关系, 实际是一个上三角矩阵)
+        function index(i, k) {
+            return k * points.length - (k - 1) * k / 2 + i;
+        }
+        function getRoot(){
+            var root = [];
+            // to get roots , using t = 1/2
+            var tt = 0.5;
+            // using DP as the primariy node, and get the others recursively
+            var sub = []; //
+            for (var i = 0; i < points.length; i++) {
+                sub.push(points[i]);
+            }
+            console.log(sub);
+            var queue = [];
+            queue[0] = sub;
+            // queue.push(sub);
+            console.log(queue[0]);
+            var control = 0;
+            while (queue.length != 0) {
+                control++; if (control>1000) break;
+                console.log("que last: ");
+                console.log(queue[queue.length-1]);
+                var sub = [];
+                sub = queue[queue.length-1];
+                queue.pop();
+                var sign = Math.sign(sub[0][1]-ym); // sign==0的情况单独处理
+                console.log("sign "+sign+" , "+(sub[0][1]-ym));
+                var ifsign = 0;
+                console.log("sub***");
+                console.log(sub);
+                for (var i = 1; i < sub.length; i++) {
+                    console.log("sub 1 "+sub[i][1]);
+                    if (sign != Math.sign(sub[i][1]-ym)) {
+                        ifsign = 1; // 符号不同
+                        break;
+                    } 
+                }
+                console.log("sub. "+sub[0][1] +", "+ sub[1][1]);
+                if (Math.abs(sub[0][1]-sub[sub.length-1][1]) < tol && ifsign || sign == 0) {
+                    // 在误差范围内
+                    console.log("-----------------------------------");                    
+                    root.push(sub[0][0]+(ym-sub[0][1])*(sub[sub.length-1][0]-sub[0][0])/(sub[sub.length-1][1]-sub[0][1])); //不准确, 替代值
+                    continue;
+                }
+                if (ifsign) {
+                    var DP = [];
+                    var len = sub.length;
+                    for (var i = 0; i < len; i++) {
+                        DP[i] = sub[i];
+                    }
+    
+                    for (var k = 1; k < len; k++) {
+                        for (var i = 0; i < len - k; i++) {
+                            console.log("dp "+DP[index(i+1, k-1)][0]);
+                            var newPt = [];
+                            newPt.push((1-tt) * DP[index(i, k-1)][0] + tt * DP[index(i+1, k-1)][0]);
+                            newPt.push((1-tt) * DP[index(i, k-1)][1] + tt * DP[index(i+1, k-1)][1]);
+                            DP.push(newPt);
+                        }
+                    }
+
+                    var sub1 = [];
+                    var sub2 = [];
+                    for (var i = 0; i < len; i++) {
+                        sub1.push(DP[index(0, i)]); // P_0^i
+                        sub2.push(DP[index(len-1-i, i)]); 
+                    }
+                    queue.push(sub1);
+                    queue.push(sub2);
+                } else {
+                    console.log("************************");
+                }
+                console.log("queue "+queue.length);
+                for (var i = 0; i < queue.length; i++) {
+                    console.log(queue[i]);
+                }
+            }
+            console.log("root "+root.length);
+            for (var i = 0; i < root.length; i++) {
+                console.log(root[i]);
+            }
+            svg.selectAll(".axistext")
+                .remove();
+          
+            var text = svg.selectAll(text)
+                .data(root)
+                .enter()
+                .append("text")
+                .attr("class", "axistext")
+                .attr("fill","green")
+                .attr("font-size","14px")
+                .attr("text-anchor","middle")
+                .attr("x",function(d,i){
+                    return d;
+                })
+                .attr("y",function(d){
+                    return ym-10;
+                })
+                .text(function(d){  //要显示的文字内容
+                    return Math.floor(d-50);   
+                });
+    
+            svg.append('text')
+                .attr("class", "axistext")
+                .attr('x', 1000-xm)
+                .attr('y', 80)
+                .attr('fill', 'green')
+                .attr('font-size', '16px')
+                .text('Root');
+
+            var text2 = svg.selectAll(text2)
+                .data(root)
+                .enter()
+                .append("text")
+                .attr("class", "axistext")
+                .attr("fill","green")
+                .attr("font-size","14px")
+                .attr("text-anchor","middle")
+                .attr("x",function(d,i){
+                    return 1000;
+                })
+                .attr("y",function(d, i){
+                    return 100 + 20 * i;
+                })
+                .text(function(d){  //要显示的文字内容
+                    return d-50;   
+                });
+        }
+    </script>
+</html>

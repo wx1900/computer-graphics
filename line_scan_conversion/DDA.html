@@ -1,0 +1,126 @@
+<html>
+    <head>
+        <title>DDA</title>
+        <script src = "../third-party/jquery-3.3.1.js"></script>
+        <script src = "../third-party/semantic.js"></script>
+        <link rel="stylesheet" type="text/css" href="../third-party/semantic.css">
+    </head>
+    <body>
+        <!-- <div class="ui raised segment" style="width:820px;height:620px "> -->
+        <canvas id = "canvas" width = "800" height = "800"></canvas>
+        <!-- </div> -->
+    </body>
+    <script>
+        var canvas = document.getElementById('canvas');
+        var ctx = canvas.getContext('2d');
+        var canvas_width = 800;
+        var grid_width = 20; 
+        // 两个像素点的坐标，记网格中点为像素点的位置
+        var x = new Array()
+        var y = new Array()
+        var now = 0;
+        
+        ctx.strokeRect(0, 0, canvas_width, canvas_width);
+       
+        function drawGrid() {
+            // 绘制网格
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 0.5;
+            for (var i = grid_width + 0.5; i < ctx.canvas.width; i += grid_width) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, ctx.canvas.height);
+                ctx.stroke();
+            }
+            for (var i = grid_width + 0.5; i < ctx.canvas.height; i += grid_width) {
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(ctx.canvas.width, i);
+                ctx.stroke();
+            }
+        }
+
+        drawGrid();
+        function drawPoint(xe, ye){
+            ctx.beginPath();
+            ctx.moveTo(xe, ye);
+            ctx.arc(xe,ye,4,0,Math.PI*2,false);
+            ctx.closePath();
+            ctx.fillStyle = '#000';
+            ctx.fill();
+        }
+        canvas.onmousedown = function(e){ 
+            var mousex = e.clientX - canvas.offsetLeft + document.body.scrollLeft;
+            var mousey = e.clientY - canvas.offsetTop + document.body.scrollTop;
+            x[now] = Math.floor(mousex / grid_width) * grid_width;
+            y[now] = Math.floor(mousey / grid_width) * grid_width;
+            ctx.fillStyle = '#f00';
+            ctx.fillRect(x[now]+0.5, y[now]+0.5, grid_width-1, grid_width-1);
+            x[now] = x[now] + grid_width/2;
+            y[now] = y[now] + grid_width/2;
+            drawPoint(x[now], y[now]);
+            console.log('now:'+now+' x:'+x[now]+' y:'+y[now]);
+            ++now;
+            // 画直线
+            if (now%2 == 0) {
+                console.log('2');
+                var x0 = x[now-2];
+                var y0 = y[now-2];
+                var x1 = x[now-1];
+                var y1 = y[now-1];
+                if (x1 < x0) {
+                    var temp = x1;
+                    x1 = x0;
+                    x0 = temp;
+                    temp = y1;
+                    y1 = y0;
+                    y0 = temp;
+                }
+                var dx,dy,ye,k = 0;
+                dx = x1 - x0;
+                dy = y1 - y0;
+                k = dy / dx * grid_width;
+                if (Math.abs(k) < grid_width*Math.sqrt(2)) {
+                    console.log('method--1');
+                    console.log('dx:'+dx+' dy:'+dy+' k:'+k);
+                    ye = y0;
+                    for (var xe = x0; xe <= x1; xe += grid_width) {
+                        drawy = ye;
+                        drawy = drawy - drawy % grid_width;
+                        ctx.fillStyle = "rgba(0,255,255,0.5)";  
+                        ctx.fillRect(xe-grid_width/2+0.5, drawy+0.5, grid_width-1, grid_width-1);
+                        drawPoint(xe, ye);
+                        console.log('xe:'+xe+' ye:'+ye);
+                        ye = ye + k;
+                    }
+                } else {
+                    if (y1 < y0) {
+                        var temp = y1;
+                        y1 = y0;
+                        y0 = temp;
+                        temp = x1;
+                        x1 = x0;
+                        x0 = temp;
+                    }
+                    var dx,dy,ye,k = 0;
+                    dx = x1 - x0;
+                    dy = y1 - y0;
+                    k1 = dx / dy * grid_width;
+                    console.log('dx:'+dx+' dy:'+dy+' k1:'+k1);               
+                    xe = x0;
+                    for (var ye = y0; ye <= y1; ye += grid_width) {
+                        drawx = xe;
+                        drawx = drawx - drawx % grid_width;
+                        ctx.fillStyle = "rgba(0,255,255,0.5)";  
+                        ctx.fillRect(drawx+0.5, ye-grid_width/2+0.5, grid_width-1, grid_width-1);
+                        drawPoint(xe, ye);
+                        console.log('xe:'+xe+' ye:'+ye);
+                        xe = xe + k1;
+                    }
+                }
+            }
+            
+        }  
+
+    </script>
+</html>
